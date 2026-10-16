@@ -12,7 +12,7 @@ const BAND_LEAD = '⎿' + LEAD_GAP
 // /pin 번호를 한 자리로 칠 수 있는 만큼만 둔다.
 const MAX_MEMO = 4
 const TEXT_LIMIT = 400
-const UNPIN_PREVIEW = 40
+const MEMO_PREVIEW = 40
 
 const KEY_PREFIX = 'pins:'
 const GLOBAL_KEY = KEY_PREFIX + 'global'
@@ -187,7 +187,7 @@ async function addMemo($, input) {
     return
   }
   if (memos.length >= MAX_MEMO) {
-    $.ui.toast('밀려난 메모: ' + shorten(memos[evictIndex(memos)].text, UNPIN_PREVIEW))
+    $.ui.toast('밀려난 메모: ' + shorten(memos[evictIndex(memos)].text, MEMO_PREVIEW))
     memos = withoutOldest(memos)
   }
   memos = [...memos, memo]
@@ -227,8 +227,9 @@ function numbered() {
 async function markDone($, number) {
   const item = numbered()[number - 1]
   if (!item) return { text: '그 번호가 핀보드에 없습니다.' }
-  if (!item.done) await toggleItem($, item.id)
-  return { text: number + '번을 완료로 표시' }
+  if (item.done) return { text: '✅ 이미 끝낸 메모입니다. ' + shorten(item.text, MEMO_PREVIEW) }
+  await toggleItem($, item.id)
+  return { text: '✅ 끝냈습니다. ' + shorten(item.text, MEMO_PREVIEW) }
 }
 
 // 문구를 바꾸면 그 메모를 두고 하던 물음은 맞지 않게 되므로 거둔다.
@@ -240,7 +241,7 @@ async function editMemo($, number, input) {
   memos = memos.map((m) => (m.id === item.id ? { ...m, text: memo.text, important: memo.important } : m))
   proposed = proposed.filter((id) => id !== item.id)
   await commit($)
-  return { text: number + '번 문구를 고쳤습니다.' }
+  return { text: '✏️ 문구를 고쳤습니다. ' + shorten(memo.text, MEMO_PREVIEW) }
 }
 
 async function unpin($, args) {
@@ -260,7 +261,7 @@ async function unpin($, args) {
   const item = numbered()[index]
   if (!item) return { text: '그 번호가 핀보드에 없습니다.' }
   await removeItem($, item.id)
-  return { text: '핀보드에서 지웠습니다. ' + shorten(item.text, UNPIN_PREVIEW) }
+  return { text: '핀보드에서 지웠습니다. ' + shorten(item.text, MEMO_PREVIEW) }
 }
 
 // 일반 화면에서는 띠에 마우스 클릭이 들어오지 않으므로 누르는 버튼을 두지 않는다.
