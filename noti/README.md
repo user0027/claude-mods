@@ -27,5 +27,6 @@ AI 가 물었는데 다른 일을 시키느라 답을 잊은 질문, 입력창 �
 | `/noti off` · `/noti on` | 기록 끄기·켜기 |
 | `/noti hide` · `/noti show` | 띠 숨기기·다시 보이기 |
 | `/noti clear` | 남은 질문 모두 삭제 |
+| `/noti feedback` | 의견을 남길 GitHub 이슈 링크 보기 |
 
 [pinboard](../pinboard/README.md) 와 같이 쓰면 메모 아래에 한 줄로 붙어요.

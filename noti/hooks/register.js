@@ -38,6 +38,8 @@ const SWEEP_ANY = '*'
 // 턴이 도는 동안 줄 머리의 ⎿ 대신 돌린다. ⎿ 처럼 한 칸짜리여야 핀보드 띠와 글자 위치가 맞는다.
 const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 const SPIN_MS = 120
+// pinboard 의 FEEDBACK_URL 과 같은 저장소다. 본문을 길게 채우면 링크가 줄을 넘어가 눌리지 않는다.
+const FEEDBACK_URL = 'https://github.com/user0027/claude-mods/issues/new'
 // pinboard 띠의 LEAD_GAP·ICON_SEP 과 같아야 두 띠의 글자 위치가 맞는다.
 const LEAD_GAP = '  '
 const ICON_SEP = ' : '
@@ -722,7 +724,7 @@ export function register(on) {
       await $.command.register({
         name: 'noti',
         description: '알림 보기',
-        argumentHint: '[on | off | hide | show | clear | faces]',
+        argumentHint: '[on | off | hide | show | clear | faces | feedback]',
       })
     } catch (error) {
       $.ui.log('명령을 등록하지 못했습니다. ' + error.message)
@@ -845,6 +847,11 @@ export function register(on) {
       return { text: hidden ? '알림 띠를 숨겼습니다. 새 핀 물음이 생기면 다시 보입니다.' : '알림 띠를 다시 보입니다.' }
     }
     if (args === 'faces') return { text: facesReport((await readMigrated($, FACES_KEY)) || {}) }
+    if (args === 'feedback') {
+      const version = await $.session.version().then((v) => v.version).catch(() => '')
+      const query = 'title=' + encodeURIComponent('[noti] ') + '&body=' + encodeURIComponent('Claude Code ' + version)
+      return { text: '아래 링크에서 GitHub 이슈로 의견을 남겨 주세요.\n' + FEEDBACK_URL + '?' + query }
+    }
     await openPane($)
     return {}
   })

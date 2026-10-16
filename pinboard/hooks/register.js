@@ -13,6 +13,8 @@ const BAND_LEAD = '⎿' + LEAD_GAP
 const MAX_MEMO = 4
 const TEXT_LIMIT = 400
 const MEMO_PREVIEW = 40
+// noti 의 FEEDBACK_URL 과 같은 저장소다. 본문을 길게 채우면 링크가 줄을 넘어가 눌리지 않는다.
+const FEEDBACK_URL = 'https://github.com/user0027/claude-mods/issues/new'
 
 const KEY_PREFIX = 'pins:'
 const GLOBAL_KEY = KEY_PREFIX + 'global'
@@ -224,6 +226,12 @@ function numbered() {
 }
 
 // /pin 2: 두 번째 메모를 완료로 바꾼다. 이미 끝낸 것이면 그대로 둔다.
+async function feedbackText($) {
+  const version = await $.session.version().then((v) => v.version).catch(() => '')
+  const query = 'title=' + encodeURIComponent('[' + PANE + '] ') + '&body=' + encodeURIComponent('Claude Code ' + version)
+  return '아래 링크에서 GitHub 이슈로 의견을 남겨 주세요.\n' + FEEDBACK_URL + '?' + query
+}
+
 async function markDone($, number) {
   const item = numbered()[number - 1]
   if (!item) return { text: '그 번호가 핀보드에 없습니다.' }
@@ -487,7 +495,7 @@ export function register(on) {
       await $.command.register({
         name: 'pin',
         description: '메모를 입력창 위에 고정. 앞에 ! 를 붙이면 중요 표시',
-        argumentHint: '[메모 | 끝낸 번호 | edit 번호 문구]',
+        argumentHint: '[메모 | 끝낸 번호 | edit 번호 문구 | feedback]',
       })
       await $.command.register({ name: 'pins', description: '핀보드 열기' })
       await $.command.register({ name: 'unpin', description: '고정한 메모 삭제', argumentHint: '[번호 | done | all]' })
@@ -534,6 +542,7 @@ export function register(on) {
 
   on('command.run', { command: 'pin' }, async ($, e) => {
     const args = String(e.args || '').trim()
+    if (args === 'feedback') return { text: await feedbackText($) }
     // 숫자만 적은 메모는 쓸 일이 없으므로 번호로 읽는다.
     const done = args.match(/^(?:done\s+)?(\d+)$/)
     if (done) return markDone($, Number(done[1]))
