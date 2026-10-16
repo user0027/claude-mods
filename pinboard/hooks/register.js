@@ -29,13 +29,15 @@ const ANSWER_CLIP = 3000
 // 다른 세션 편지·작업 알림처럼 태그로 감싸 들어온 입력
 const WRAPPED_INPUT = /^<[a-z][a-z-]*[\s>]/
 
+const PIN_ICON = '📌'
 // 알림 mod 띠와 같은 모양으로 묻는다.
 const ASK_ICON = '🤔'
 const ASK_STATE = { plugin: 'pinboard', key: 'ask' }
 // 알림 띠 mod 가 떠 있으면 묻는 줄을 그쪽 한 줄에 맡겨 같은 얼굴이 두 줄로 겹치지 않게 한다.
 const HOST_STATE = { plugin: 'noti', key: 'hostsAsk' }
-// 알림 mod 의 BAND_RULE 과 같아야 한 띠에서 길이·말투가 맞는다.
-const ASK_RULE = "40자 이내 한국어 한 문장으로 쓰고, '~했어요', '~해 주세요' 처럼 해요체 서술어로 끝낸다. '~완료', '~필요' 처럼 명사로 끝내지 않고, '~했다', '~합니다', '~입니까' 같은 다나까 말투도 쓰지 않는다."
+// 알림 mod 의 BAND_CHARS·BAND_RULE 과 같아야 한 띠에서 길이·말투가 맞는다.
+const ASK_CHARS = 40
+const ASK_RULE = `${ASK_CHARS}자 이내 한국어 한 문장으로 쓰고, '~했어요', '~해 주세요' 처럼 해요체 서술어로 끝낸다. '~완료', '~필요' 처럼 명사로 끝내지 않고, '~했다', '~합니다', '~입니까' 같은 다나까 말투도 쓰지 않는다.`
 // 끝난 번호와 함께 물을 문장까지 받으므로 넉넉히 둔다.
 const AUTO_CHECK_MAX_TOKENS = 160
 const COMMIT_LIMIT = 30
@@ -115,6 +117,10 @@ async function loadBoard($) {
   scannedAt = Number(board.scannedAt) || 0
   await publishAsk($)
   // 띠는 읽기 전에 이미 한 번 그려졌으므로 다시 그리게 한다.
+  refresh($)
+}
+
+function refresh($) {
   $.ui.invalidate('ui.render')
 }
 
@@ -123,7 +129,7 @@ async function commit($) {
   if (proposed.length === 0) askText = ''
   await $.store.set(storeKey, { memos, proposed, askText, scannedAt })
   await publishAsk($)
-  $.ui.invalidate('ui.render')
+  refresh($)
 }
 
 // 알림 띠가 이 문장을 자기 줄로 합쳐 그리도록 내놓는다.
@@ -253,8 +259,7 @@ async function unpin($, args) {
 function renderBand($, ui, theirs, hosted) {
   const { Box, Text } = ui
   const line = (children) => Box({ flexDirection: 'row', paddingLeft: INDENT, children })
-  // 줄마다 따로 읽히도록 모든 줄에 📌 를 붙인다.
-  const lead = () => [Text({ dimColor: true, children: [BAND_LEAD] }), Text({ children: ['📌'] }), Text({ dimColor: true, children: [ICON_SEP] })]
+  const lead = (icon) => [Text({ dimColor: true, children: [BAND_LEAD] }), Text({ children: [icon] }), Text({ dimColor: true, children: [ICON_SEP] })]
 
   // 한글에 결합 문자 취소선을 붙이면 깨져 보여서 띠에서는 흐리게만 그린다.
   const body = (item) => {
@@ -262,18 +267,14 @@ function renderBand($, ui, theirs, hosted) {
     return Text({ wrap: 'truncate-end', children: [item.text] })
   }
 
-  const row = (item) => line([...lead(), body(item)])
+  // 줄마다 따로 읽히도록 모든 줄에 📌 를 붙인다.
+  const row = (item) => line([...lead(PIN_ICON), body(item)])
 
   // 핀은 직접 고정한 메모라 다른 mod 띠보다 위에 둔다.
   const rows = memos.filter((item) => !item.done).map(row)
   const asking = memos.filter((item) => proposed.includes(item.id))
   const ask = asking.length > 0 && askText && !hosted
-    ? [line([
-        Text({ dimColor: true, children: [BAND_LEAD] }),
-        Text({ children: [ASK_ICON] }),
-        Text({ dimColor: true, children: [ICON_SEP] }),
-        Text({ dimColor: true, wrap: 'truncate-end', children: [askText] }),
-      ])]
+    ? [line([...lead(ASK_ICON), Text({ dimColor: true, wrap: 'truncate-end', children: [askText] })])]
     : []
   return Box({
     flexDirection: 'column',

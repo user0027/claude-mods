@@ -20,6 +20,8 @@ const TEXT_LIMIT = 400
 // 띠는 한 줄이라 넘치면 잘린다. 모델이 프롬프트의 길이·끝맺음을 자주 어겨서 받은 뒤에 다시 잰다.
 const BAND_CHARS = 40
 const BAND_RULE = `${BAND_CHARS}자 이내 한국어 한 문장으로 쓰고, '~했어요', '~해 주세요' 처럼 해요체 서술어로 끝낸다. '~완료', '~필요' 처럼 명사로 끝내지 않고, '~했다', '~합니다', '~입니까' 같은 다나까 말투도 쓰지 않는다.`
+const NAME_RULE = '파일명·플러그인명 같은 영문 식별자는 옮겨 적지 말고 한국어로 풀어 쓴다. 다만 세션·프로젝트 이름은 번역하지 않고 영문 그대로 쓴다.'
+const NO_QUESTION_RULE = '\'~할까요?\' 처럼 묻는 꼴로 쓰지 않는다.'
 // '필요'·'중요' 는 '요' 로 끝나도 명사다.
 const SENTENCE_END = /(?<![필중])요[.!?]?$/
 
@@ -54,6 +56,7 @@ const FACES_KEY = 'noti:faces'
 const PIN_ASK = { plugin: 'pinboard', key: 'ask' }
 const HOST_STATE = { plugin: 'noti', key: 'hostsAsk' }
 const NOTICE_KINDS = ['missed', 'check', 'work', 'next', 'finished']
+const noticeKind = (kind, fallback) => (NOTICE_KINDS.includes(kind) ? kind : fallback)
 const itemKind = (item) => item.kind || (item.notice ? 'check' : item.decision ? 'decision' : 'request')
 const bandIcon = (item) => (ICONS[itemKind(item)] || ICONS.decision) + ICON_SEP
 // 팁 줄과 같은 머리 글자. 반짝임에서는 뺀다.
@@ -83,6 +86,8 @@ const MODEL = 'haiku'
 const MODEL_TIMEOUT_MS = 20000
 // 대상 두 줄을 먼저 적게 하므로 판정 한 단어보다 넉넉히 둔다.
 const JUDGE_MAX_TOKENS = 120
+const HOLD_MAX_TOKENS = 160
+const RESOLVED_MAX_TOKENS = 30
 const RECENT_CLOSED = 5
 const TRACE_KEEP = 20
 const DEFER_MS = 50
@@ -172,8 +177,7 @@ async function loadBoard($) {
   const board = saved && typeof saved === 'object' ? saved : {}
   // 판정 중에 꺼졌으면 판정은 다시 오지 않으므로 숨긴 표시를 풀고 읽는다.
   questions = Array.isArray(board.questions)
-    ? board.questions.filter((item) => item && typeof item.text === 'string').slice(-MAX_QUESTION)
-      .map(({ judging, ...item }) => item)
+    ? board.questions.filter((item) => item && typeof item.text === 'string').slice(-MAX_QUESTION).map(withoutJudging)
     : []
   enabled = board.enabled !== false
   hidden = board.hidden === true
@@ -207,6 +211,20 @@ async function commit($) {
 
 function shorten(text, limit) {
   return text.length > limit ? text.slice(0, limit) + '…' : text
+}
+
+function withoutJudging({ judging, ...item }) {
+  return item
+}
+
+// 승인·호응만 하는 짧은 말인지. 질문에 대한 답으로 판정하지 않는다.
+function isAck(body) {
+  return SKIP_WORDS.includes(body.toLowerCase())
+}
+
+async function readPinAsk($) {
+  const { value = '' } = await $.state.get(PIN_ASK).catch(() => ({}))
+  return value
 }
 
 // Text 에는 취소선 속성이 없어서 글자마다 결합 문자를 붙여 그린다. 화면(Pane)에서만 쓴다.
@@ -324,7 +342,7 @@ async function showNotice($, text, asked, kind) {
   if (!text || questions.some((q) => !q.done && !q.notice)) return
   const old = questions.find((q) => q.notice && !q.done)
   if (old && sameQuestion(old.text, text)) return
-  const item = { id: newId(), text, asked, done: false, notice: true, kind: NOTICE_KINDS.includes(kind) ? kind : 'check' }
+  const item = { id: newId(), text, asked, done: false, notice: true, kind: noticeKind(kind, 'check') }
   questions = [...questions.filter((q) => !q.notice), item].slice(-MAX_QUESTION)
   await commit($)
   startShimmer($, item)
@@ -381,7 +399,7 @@ async function liveNotice($) {
         '고르는 차례는 이렇다. ① 사용자가 시켰는데 AI 가 아직 손대지 않았거나 답하지 않고 넘어간 요청 ② 사용자가 정하거나 직접 봐야 할 것 ' +
         '③ 지금 AI 가 무엇을 하고 있는지와 사용자가 알아 두면 좋을 점 ④ 권하는 다음 단계. 앞의 것이 있으면 그것을 쓴다. ' +
         BAND_RULE + ' 띠만 보고 이해되게 쓴다. 추천이 있으면 앞에 싣는다. 이미 끝낸 일을 다시 알리지 않는다. ' +
-        '파일명 같은 영문 식별자는 옮겨 적지 말고 한국어로 풀어 쓴다. 다만 세션·프로젝트 이름은 번역하지 않고 영문 그대로 쓴다. \'~할까요?\' 처럼 묻는 꼴로 쓰지 않는다.' +
+        NAME_RULE + ' ' + NO_QUESTION_RULE +
         (midTurn
           ? ' 지금은 AI 가 일하는 중이다. ②는 고르지 않는다. AI 가 읽거나 확인하거나 고치는 일은 ③이고, \'~하고 있어요\' 처럼 진행형으로 쓴다. \'~해 주세요\' 로 쓰지 않는다.'
           : ''),
@@ -412,7 +430,7 @@ async function liveNotice($) {
 
 function showLive($, text, kind) {
   if (!text || (liveItem && sameQuestion(liveItem.text, text))) return
-  liveItem = { id: newId(), text, done: false, notice: true, kind: NOTICE_KINDS.includes(kind) ? kind : 'work' }
+  liveItem = { id: newId(), text, done: false, notice: true, kind: noticeKind(kind, 'work') }
   refresh($)
   startShimmer($, liveItem)
 }
@@ -534,9 +552,9 @@ async function holdQuestion($, prompt, answer) {
       'AI 가 답변에서 권한 쪽이 있으면 그 추천을 앞에 싣고, 없으면 선택지를 그대로 넣는다. ' +
       '예) "시험용 판은 지우는 게 좋을 것 같아요. 지워도 될지 알려 주세요", "팀 링크까지 갱신할지, 개발 주소로만 볼지 정해 주세요". ' +
       '확인을 부탁했으면 무엇을 보고 무엇을 알려 주면 되는지까지 적는다. "~를 확인해 주세요" 로만 끝내지 않는다. ' +
-        '\'~할까요?\' 처럼 묻는 꼴로 쓰지 않는다. 어미는 \'~해 보면 어때요\', \'~하면 좋겠어요\', \'~부터 정해 주세요\', ' +
-        '\'~하는 게 좋을 것 같아요\' 처럼 내용에 맞게 골라 쓰고, 한 어미만 되풀이하지 않는다. ' +
-      '파일명·플러그인명 같은 영문 식별자는 옮겨 적지 말고 한국어로 풀어 쓴다. 다만 세션·프로젝트 이름은 번역하지 않고 영문 그대로 쓴다. ' +
+      NO_QUESTION_RULE + ' 어미는 \'~해 보면 어때요\', \'~하면 좋겠어요\', \'~부터 정해 주세요\', ' +
+      '\'~하는 게 좋을 것 같아요\' 처럼 내용에 맞게 골라 쓰고, 한 어미만 되풀이하지 않는다. ' +
+      NAME_RULE + ' ' +
       '이미 남아 있는 질문과 같은 결정이면 표현이 달라도 그 문구를 글자 그대로 쓴다. ' +
       '이미 내려간 질문과 같은 결정이면 표현이 달라도 그 문구를 글자 그대로 쓴다. 같은 질문이 띠에 되살아나지 않게 하려는 것이다. ' +
       '다음에 무엇을 할지, 더 필요한 것이 있는지처럼 정할 대상 없이 열어 둔 질문도 넣지 않는다. ' +
@@ -546,7 +564,7 @@ async function holdQuestion($, prompt, answer) {
       '\n\n이미 내려간 질문:\n' + (closed.join('\n') || '(없음)') +
       '\n\n사용자 요청:\n' + shorten(prompt, PROMPT_CLIP) +
       '\n\nAI 답변(끝부분):\n' + answer.slice(-ANSWER_CLIP),
-    maxTokens: 160,
+    maxTokens: HOLD_MAX_TOKENS,
     timeoutMs: MODEL_TIMEOUT_MS,
   })
   if (!result.isAnswered || started !== epoch) {
@@ -564,23 +582,24 @@ async function holdQuestion($, prompt, answer) {
     ? { labels, asked: answer.slice(-ASKED_CLIP), decision: parsed.decision === true }
     : null  // 판정이 끝나기 전에 편지가 왔으면 사용자가 답할 틈 없이 묻히므로 바로 올린다.
   if (held && letterArrived) {
-    pendingQuestion = null
-    await saveBoard($)
-    await pushQuestions($, held.labels, held.asked, held.decision)
+    await releaseHeld($, held)
     return
   }
   pendingQuestion = held
   await saveBoard($)
 }
 
+// 걸어 둔 질문을 내려놓고 띠에 올린다.
+async function releaseHeld($, held) {
+  pendingQuestion = null
+  await saveBoard($)
+  await pushQuestions($, held.labels, held.asked, held.decision)
+}
+
 // 편지가 오면 세션이 그 일을 먼저 하므로, 답을 기다리던 질문은 바로 띠에 올린다.
 async function buryByLetter($) {
   letterArrived = true
-  if (!pendingQuestion) return
-  const question = pendingQuestion
-  pendingQuestion = null
-  await saveBoard($)
-  await pushQuestions($, question.labels, question.asked, question.decision)
+  if (pendingQuestion) await releaseHeld($, pendingQuestion)
 }
 
 // 사용자의 말이 AI 가 물은 것에 답했는지 가린다. true·false, 판정을 못 했거나 /clear 로 낡았으면 null.
@@ -616,7 +635,7 @@ async function judgeAnswered($, asked, body) {
 // 걸어 둔 질문에 답하지 않고 다른 일을 시켰으면 띠에 올린다.
 async function checkAnswered($, question, prompt) {
   const body = prompt.trim()
-  if (SKIP_WORDS.includes(body.toLowerCase())) return
+  if (isAck(body)) return
   const answered = await judgeAnswered($, question.asked, body)
   await note($, 'judge', String(answered))
   if (answered === false) await pushQuestions($, question.labels, question.asked, question.decision)
@@ -629,7 +648,7 @@ async function checkShown($, item, prompt) {
     await judgeShown($, item, prompt)
   } finally {
     if (questions.some((q) => q.id === item.id && q.judging)) {
-      questions = questions.map((q) => (q.id === item.id ? (({ judging, ...rest }) => rest)(q) : q))
+      questions = questions.map((q) => (q.id === item.id ? withoutJudging(q) : q))
       await commit($)
     }
   }
@@ -637,7 +656,7 @@ async function checkShown($, item, prompt) {
 
 async function judgeShown($, item, prompt) {
   const body = prompt.trim()
-  if (SKIP_WORDS.includes(body.toLowerCase())) return
+  if (isAck(body)) return
   const started = epoch
   let result
   try {
@@ -664,7 +683,7 @@ async function judgeShown($, item, prompt) {
   }
   const text = parsed.action === 'update' && (await fitBand($, cleanLabels([parsed.text])[0]))
   if (!text || !questions.some((q) => q.id === item.id)) return
-  questions = questions.map((q) => (q.id === item.id ? (({ judging, ...rest }) => ({ ...rest, text }))(q) : q))
+  questions = questions.map((q) => (q.id === item.id ? { ...withoutJudging(q), text } : q))
   await commit($)
   startShimmer($, { ...item, text })
 }
@@ -682,7 +701,7 @@ async function checkResolved($, item, prompt, answer) {
       '남은 질문:\n' + item.text +
       '\n\n사용자 요청:\n' + (shorten(prompt, PROMPT_CLIP) || '(다른 세션 편지 등으로 시작한 턴)') +
       '\n\nAI 답변(끝부분):\n' + answer.slice(-ANSWER_CLIP),
-    maxTokens: 30,
+    maxTokens: RESOLVED_MAX_TOKENS,
     timeoutMs: MODEL_TIMEOUT_MS,
   })
   if (!result.isAnswered || started !== epoch) return
@@ -821,8 +840,7 @@ export function register(on) {
     }
     if (args === 'hide' || args === 'show') {
       hidden = args === 'hide'
-      const { value: pinAsk = '' } = await $.state.get(PIN_ASK).catch(() => ({}))
-      hiddenAsk = hidden ? pinAsk : ''
+      hiddenAsk = hidden ? await readPinAsk($) : ''
       await commit($)
       return { text: hidden ? '알림 띠를 숨겼습니다. 새 핀 물음이 생기면 다시 보입니다.' : '알림 띠를 다시 보입니다.' }
     }
@@ -835,7 +853,7 @@ export function register(on) {
   //   ⎿  🤔 : 제목 후보 중에서 골라 주세요
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const own = questions.filter((q) => !q.done && !q.judging).pop()
-    const { value: pinAsk = '' } = await $.state.get(PIN_ASK).catch(() => ({}))
+    const pinAsk = await readPinAsk($)
     // 차례: 핀이 끝났는지 묻는 말, 이번 턴 소식, 답을 기다리는 질문, 지난 턴 소식.
     // 사용자가 직접 꽂은 일의 끝맺음을 가장 먼저 챙긴다.
     if (hidden && (!pinAsk || pinAsk === hiddenAsk)) return next(e)
