@@ -10,7 +10,7 @@ const LEAD_GAP = '  '
 const ICON_SEP = ' : '
 const BAND_LEAD = '⎿' + LEAD_GAP
 // /pin 번호를 한 자리로 칠 수 있는 만큼만 둔다.
-const MAX_MEMO = 9
+const MAX_MEMO = 4
 const TEXT_LIMIT = 400
 const UNPIN_PREVIEW = 40
 
@@ -103,7 +103,21 @@ async function resolveStoreKey($) {
 
 function sanitize(list) {
   if (!Array.isArray(list)) return []
-  return list.filter((item) => item && typeof item.text === 'string').slice(-MAX_MEMO)
+  let kept = list.filter((item) => item && typeof item.text === 'string')
+  // 한도를 줄여도 남은 메모보다 끝낸 메모가 먼저 빠지게 한다.
+  while (kept.length > MAX_MEMO) kept = withoutOldest(kept)
+  return kept
+}
+
+// 끝낸 것 중 가장 오래된 것, 없으면 가장 오래된 것을 뺀다.
+function evictIndex(list) {
+  const doneAt = list.findIndex((item) => item.done)
+  return doneAt >= 0 ? doneAt : 0
+}
+
+function withoutOldest(list) {
+  const out = evictIndex(list)
+  return list.filter((_, i) => i !== out)
 }
 
 async function loadBoard($) {
@@ -172,12 +186,9 @@ async function addMemo($, input) {
     $.ui.toast('고정할 메모를 같이 적어 주세요.')
     return
   }
-  // 꽉 차면 끝낸 것부터, 없으면 가장 오래된 것을 밀어낸다.
   if (memos.length >= MAX_MEMO) {
-    const doneAt = memos.findIndex((item) => item.done)
-    const out = doneAt >= 0 ? doneAt : 0
-    $.ui.toast('밀려난 메모: ' + shorten(memos[out].text, UNPIN_PREVIEW))
-    memos = memos.filter((_, i) => i !== out)
+    $.ui.toast('밀려난 메모: ' + shorten(memos[evictIndex(memos)].text, UNPIN_PREVIEW))
+    memos = withoutOldest(memos)
   }
   memos = [...memos, memo]
   await commit($)
