@@ -365,6 +365,8 @@ async function liveNotice($) {
   }
   liveRunning = true
   const started = epoch
+  // 턴 중에는 AI 가 아직 사용자에게 아무것도 부탁하지 않았다. AI 가 하는 일을 부탁으로 옮겨 적지 않게 ②를 뺀다.
+  const midTurn = turnRunning
   try {
     const messages = await $.session.messages({ as: 'api' })
     if (!Array.isArray(messages) || messages.length === 0) return
@@ -379,7 +381,10 @@ async function liveNotice($) {
         '고르는 차례는 이렇다. ① 사용자가 시켰는데 AI 가 아직 손대지 않았거나 답하지 않고 넘어간 요청 ② 사용자가 정하거나 직접 봐야 할 것 ' +
         '③ 지금 AI 가 무엇을 하고 있는지와 사용자가 알아 두면 좋을 점 ④ 권하는 다음 단계. 앞의 것이 있으면 그것을 쓴다. ' +
         BAND_RULE + ' 띠만 보고 이해되게 쓴다. 추천이 있으면 앞에 싣는다. 이미 끝낸 일을 다시 알리지 않는다. ' +
-        '파일명 같은 영문 식별자는 옮겨 적지 말고 한국어로 풀어 쓴다. 다만 세션·프로젝트 이름은 번역하지 않고 영문 그대로 쓴다. \'~할까요?\' 처럼 묻는 꼴로 쓰지 않는다.',
+        '파일명 같은 영문 식별자는 옮겨 적지 말고 한국어로 풀어 쓴다. 다만 세션·프로젝트 이름은 번역하지 않고 영문 그대로 쓴다. \'~할까요?\' 처럼 묻는 꼴로 쓰지 않는다.' +
+        (midTurn
+          ? ' 지금은 AI 가 일하는 중이다. ②는 고르지 않는다. AI 가 읽거나 확인하거나 고치는 일은 ③이고, \'~하고 있어요\' 처럼 진행형으로 쓴다. \'~해 주세요\' 로 쓰지 않는다.'
+          : ''),
       prompt:
         '지금 띠에 있는 말:\n' + (questions.filter((q) => !q.done).map((q) => q.text).join('\n') || '(없음)') +
         '\n\n사용자가 최근에 한 말(오래된 것부터):\n' + (userWords.join('\n') || '(없음)') +
@@ -389,6 +394,7 @@ async function liveNotice($) {
     })
     if (!result.isAnswered || started !== epoch) return
     const parsed = parseJson(result.text) || {}
+    if (midTurn && parsed.kind === 'check') return
     const text = await fitBand($, cleanLabels([parsed.notice])[0])
     await note($, 'live', text ? 'notice' : 'empty')
     if (turnRunning) showLive($, text, parsed.kind)
