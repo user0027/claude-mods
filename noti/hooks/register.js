@@ -77,7 +77,7 @@ const WRAPPED_INPUT = /^<[a-z][a-z-]*[\s>]/
 const LETTER_INPUT = /^<cross-session-message[\s>]/
 
 const KEY_PREFIX = 'noti:'
-// 플러그인 이름이 missed-questions 이던 때 키. 처음 읽을 때 새 키로 옮기고 지운다.
+// 옛 키. 처음 읽을 때 새 키로 옮기고 지운다.
 const LEGACY_PREFIX = 'missed:'
 const GLOBAL_KEY = KEY_PREFIX + 'global'
 
@@ -217,7 +217,6 @@ function withoutJudging({ judging, ...item }) {
   return item
 }
 
-// 승인·호응만 하는 짧은 말인지. 질문에 대한 답으로 판정하지 않는다.
 function isAck(body) {
   return SKIP_WORDS.includes(body.toLowerCase())
 }
@@ -272,7 +271,6 @@ function normalize(text) {
   return text.toLowerCase().replace(/[\s\p{P}]/gu, '')
 }
 
-// 같거나 한쪽이 다른 쪽을 포함하면 같은 질문으로 본다.
 function sameQuestion(a, b) {
   const x = normalize(a)
   const y = normalize(b)
@@ -481,7 +479,6 @@ function endTurn($) {
   refresh($)
 }
 
-// 도구를 쓸 때마다 부르되 간격 안에서는 한 번만 짓는다.
 function scheduleLive($) {
   const now = Date.now()
   if (liveRunning || now - liveAt < LIVE_INTERVAL_MS) return
@@ -589,7 +586,6 @@ async function holdQuestion($, prompt, answer) {
   await saveBoard($)
 }
 
-// 걸어 둔 질문을 내려놓고 띠에 올린다.
 async function releaseHeld($, held) {
   pendingQuestion = null
   await saveBoard($)
@@ -632,7 +628,6 @@ async function judgeAnswered($, asked, body) {
   return parsed && typeof parsed.answered === 'boolean' ? parsed.answered : null
 }
 
-// 걸어 둔 질문에 답하지 않고 다른 일을 시켰으면 띠에 올린다.
 async function checkAnswered($, question, prompt) {
   const body = prompt.trim()
   if (isAck(body)) return
@@ -794,7 +789,6 @@ export function register(on) {
       const question = pendingQuestion
       pendingQuestion = null
       await saveBoard($)
-      // 모델 판정은 턴을 기다리게 하지 않도록 뒤에서 돌린다.
       $.clock.after(DEFER_MS, () => checkAnswered($, question, text))
     }
     return next(e)

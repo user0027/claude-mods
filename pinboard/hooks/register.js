@@ -546,8 +546,8 @@ export function register(on) {
     // 끝낸 메모까지 그리면 띠가 비지 않아 엔진의 [-] 도 계속 남는다. 끝낸 것은 /pins 화면에서 본다.
     if (!memos.some((item) => !item.done)) return next(e)
     const ui = $.ui.resolve(e)
-    // 다른 mod 가 같은 띠에 그린 것을 같이 담는다.
     const { value: hosted = false } = await $.state.get(HOST_STATE).catch(() => ({}))
+    // 다른 mod 가 같은 띠에 그린 것을 같이 담는다.
     return renderBand($, ui, await next(e), hosted)
   })
 
