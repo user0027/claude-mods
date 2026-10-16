@@ -549,6 +549,8 @@ async function holdQuestion($, prompt, answer) {
       'AI 가 답변에서 권한 쪽이 있으면 그 추천을 앞에 싣고, 없으면 선택지를 그대로 넣는다. ' +
       '예) "시험용 판은 지우는 게 좋을 것 같아요. 지워도 될지 알려 주세요", "팀 링크까지 갱신할지, 개발 주소로만 볼지 정해 주세요". ' +
       '확인을 부탁했으면 무엇을 보고 무엇을 알려 주면 되는지까지 적는다. "~를 확인해 주세요" 로만 끝내지 않는다. ' +
+      'AI 가 자기가 할 일을 해도 될지 물은 것이면 \'~할지 알려 주세요\', \'~해도 될지 정해 주세요\' 로 쓴다. ' +
+      '\'~를 넣어 주세요\' 처럼 사용자가 직접 할 일로 읽히게 쓰지 않는다. ' +
       NO_QUESTION_RULE + ' 어미는 \'~해 보면 어때요\', \'~하면 좋겠어요\', \'~부터 정해 주세요\', ' +
       '\'~하는 게 좋을 것 같아요\' 처럼 내용에 맞게 골라 쓰고, 한 어미만 되풀이하지 않는다. ' +
       NAME_RULE + ' ' +
@@ -611,6 +613,7 @@ async function judgeAnswered($, asked, body) {
         'AI 가 사용자에게 무언가를 물었고, 사용자가 그 뒤에 말을 했다. 그 말이 AI 의 질문에 답하거나 ' +
         '고르거나 미루겠다고 한 것이면 answered 를 true 로, 질문을 건드리지 않고 다른 일만 시켰으면 false 로 한다. ' +
         '선택지 번호·이름만 말한 것도 답이다. 선택지를 고르지 않고 다른 방안을 내거나, 되묻거나, 반대한 것도 같은 결정을 두고 한 말이므로 답이다. ' +
+        'AI 가 제안에 넣은 숫자·범위·대상을 다른 값으로 바꾸자고 한 것도 그 제안에 대한 답이다. ' +
         'AI 가 제안한 방향은 그대로 두고 이어서 세부만 고쳐 달라고 한 것도 그 제안을 받아들인 것이므로 답이다. ' +
         '먼저 AI 가 정해 달라고 한 대상과, 사용자의 말이 무엇을 하라는지를 각각 짧게 적는다. ' +
         '둘이 같은 결정일 때만 답이다. 같은 낱말이 나와도 다른 기능·다른 물건에 대한 요청이면 false 다. ' +
@@ -691,6 +694,7 @@ async function checkResolved($, item, prompt, answer) {
     system:
       'AI 코딩 도우미가 전에 사용자에게 남긴 질문과, 그 뒤에 끝난 한 턴을 보고 JSON 한 줄로만 답한다. 형식은 {"resolved":true} 이다. ' +
       '이번 턴에서 그 질문이 정해졌거나, 이미 그대로 진행됐거나, 더 정할 필요가 없어졌다고 드러나면 true 다. ' +
+      '질문에 적힌 값과 다른 값으로 같은 일을 이미 했어도 그 질문은 정해진 것이므로 true 다. ' +
       '그 질문과 상관없는 일을 했거나 애매하면 false 로 한다.',
     prompt:
       '남은 질문:\n' + item.text +
@@ -701,6 +705,7 @@ async function checkResolved($, item, prompt, answer) {
   })
   if (!result.isAnswered || started !== epoch) return
   const parsed = parseJson(result.text)
+  await note($, 'resolved', String(parsed ? parsed.resolved : 'bad-json'))
   if (parsed && parsed.resolved === true) await removeItem($, item.id)
 }
 
