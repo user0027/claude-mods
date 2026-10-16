@@ -1,0 +1,21 @@
+{
+  "name": "claude-mods",
+  "owner": {
+    "name": "user0027"
+  },
+  "metadata": {
+    "description": "Claude Code 입력창 위에 붙는 메모·알림 mod"
+  },
+  "plugins": [
+    {
+      "name": "pinboard",
+      "source": "./pinboard",
+      "description": "직접 적은 메모를 입력창 위에 고정한다"
+    },
+    {
+      "name": "noti",
+      "source": "./noti",
+      "description": "답하지 않고 넘어간 질문과 지금 할 일 소식을 입력창 위 알림 띠 한 줄로 보여 준다"
+    }
+  ]
+}

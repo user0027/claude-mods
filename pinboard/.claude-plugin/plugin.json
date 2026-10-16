@@ -1,0 +1,9 @@
+{
+  "name": "pinboard",
+  "version": "0.3.0",
+  "description": "직접 적은 메모를 입력창 위에 고정한다",
+  "author": {
+    "name": "user0027"
+  },
+  "types": "./types/index.d.ts"
+}

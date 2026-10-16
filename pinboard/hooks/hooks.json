@@ -1,0 +1,4 @@
+{
+  "description": "핀보드 hooks 모듈",
+  "modules": ["./register.js"]
+}
