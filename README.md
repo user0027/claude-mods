@@ -21,3 +21,20 @@ Claude Code 입력창 위에 한 줄씩 붙는 mod 두 개예요.
 
 - Claude Code 2.1.287 이상이 필요해요.
 - 데스크톱 앱의 Code 탭에서는 설치 명령이 안 돼요. 터미널에서 설치하면 Code 탭에서도 로드되고요.
+
+## 업데이트
+
+새 버전은 저절로 들어오지 않아요. Claude Code 는 직접 추가한 마켓플레이스를 자동 업데이트하지 않거든요.
+
+자동으로 받으려면 처음 한 번만 켜 두세요. `/plugin` 을 열고 Marketplaces 탭에서 `claude-mods` 를 골라
+Enable auto-update 를 켜면 돼요.
+
+손으로 받을 때는 터미널에서 이렇게 쳐요.
+
+```
+claude plugin marketplace update claude-mods
+claude plugin update pinboard@claude-mods
+claude plugin update noti@claude-mods
+```
+
+어느 쪽이든 이미 열려 있는 세션은 `/reload-plugins` 를 치거나 새 세션을 열어야 새 버전으로 돌아요.

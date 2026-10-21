@@ -223,6 +223,13 @@ function isAck(body) {
   return SKIP_WORDS.includes(body.toLowerCase())
 }
 
+// 핀보드는 이 값이 없으면 묻는 줄을 따로 그려 같은 줄이 두 번 뜬다. 세션 상태가 비는 때를 다 알 수 없어
+// 시작 때 한 번이 아니라 입력마다 다시 건다.
+async function claimHost($) {
+  const { value } = await $.state.get(HOST_STATE).catch(() => ({}))
+  if (value !== true) await $.state.set(HOST_STATE, true).catch(() => {})
+}
+
 async function readPinAsk($) {
   const { value = '' } = await $.state.get(PIN_ASK).catch(() => ({}))
   return value
@@ -292,7 +299,7 @@ async function fitBand($, text) {
   try {
     const result = await $.model.complete({
       model: MODEL,
-      system: '입력창 위 띠에 띄울 문장을 고친다. 뜻은 그대로 두고 ' + BAND_RULE + ' 고친 문장만 답한다.',
+      system: '입력창 위 띠에 띄울 문장을 고친다. 뜻은 그대로 두고 ' + BAND_RULE + ' 끝맺음을 바꿀 때 아직 안 한 일을 한 것처럼 시제를 바꾸지 않는다. 고친 문장만 답한다.',
       prompt: text,
       maxTokens: LIVE_MAX_TOKENS,
       timeoutMs: MODEL_TIMEOUT_MS,
@@ -718,7 +725,7 @@ function openPane($) {
 
 export function register(on) {
   on('session.start', async ($, e, next) => {
-    await $.state.set(HOST_STATE, true).catch(() => {})
+    await claimHost($)
     await loadBoard($)
     try {
       await $.command.register({
@@ -735,6 +742,7 @@ export function register(on) {
   // /clear·/resume·/branch 뒤에는 session.start 가 다시 실행되지 않아서 여기서 다시 읽는다.
   // 질문은 대화에 매인 것이라 /clear 하면 비운다. 끄고 켠 상태는 남긴다.
   on('classic.SessionStart', { source: ['startup', 'clear', 'resume', 'fork'] }, async ($, e, next) => {
+    await claimHost($)
     await loadBoard($)
     // 새로 연 세션은 지난 대화의 질문을 이어받지 않는다. 다시 불러오기(session.start)에서는 비우지 않는다.
     if (e.source === 'clear' || e.source === 'startup') await clearAll($)
@@ -755,6 +763,7 @@ export function register(on) {
   // 걸어 둔 질문이 있으면 이 말이 그 답인지 본다.
   // 체크한 질문은 다음 입력 때 지운다. 그 전까지는 ↺ 로 되돌릴 수 있다.
   on('prompt.submit', async ($, e, next) => {
+    await claimHost($)
     if (questions.some((q) => q.done)) {
       questions = questions.filter((q) => !q.done)
       await commit($)
