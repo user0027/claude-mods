@@ -723,15 +723,59 @@ function openPane($) {
   return $.ui.open({ id: PANE, title: '알림', focus: true, closeOnEscape: true })
 }
 
+// 직접 추가한 마켓플레이스는 자동 업데이트가 기본으로 꺼져 있어, 새 버전이 나와도 설치한 사람이 알 길이 없다.
+const UPDATE_KEY = KEY_PREFIX + 'updates'
+const UPDATE_URL = 'https://raw.githubusercontent.com/user0027/claude-mods/main/noti/.claude-plugin/plugin.json'
+const UPDATE_EVERY_MS = 24 * 60 * 60 * 1000
+// 세션이 막 뜰 때 띄우면 첫 화면에 묻힌다.
+const UPDATE_DELAY_MS = 3000
+const UPDATE_TOAST_MS = 15000
+
+function isNewer(remote, local) {
+  const a = String(remote).split('.').map(Number)
+  const b = String(local).split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0)
+  }
+  return false
+}
+
+async function checkUpdate($) {
+  const saved = (await $.store.get(UPDATE_KEY)) || {}
+  if (saved.enabled === false || Date.now() - (Number(saved.checkedAt) || 0) < UPDATE_EVERY_MS) return
+  if (await $.env.get('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC')) return
+  await $.store.set(UPDATE_KEY, { ...saved, checkedAt: Date.now() })
+  try {
+    const local = JSON.parse(await $.fs.read($.plugin.root + '/.claude-plugin/plugin.json')).version
+    const response = await $.http.fetch(UPDATE_URL)
+    if (!response.ok) return
+    const remote = JSON.parse(response.text).version
+    if (!isNewer(remote, local)) return
+    $.ui.toast(
+      `새 버전(${remote})이 나왔어요. 터미널에서 claude plugin update noti@claude-mods 로 받아 주세요.`,
+      { timeoutMs: UPDATE_TOAST_MS },
+    )
+  } catch (error) {
+    // 오프라인이거나 저장소를 못 읽으면 다음 날 다시 확인한다.
+  }
+}
+
+async function setUpdateCheck($, on) {
+  const saved = (await $.store.get(UPDATE_KEY)) || {}
+  await $.store.set(UPDATE_KEY, { ...saved, enabled: on })
+  return { text: on ? '새 버전이 나오면 알려 드릴게요.' : '새 버전 확인을 껐습니다.' }
+}
+
 export function register(on) {
   on('session.start', async ($, e, next) => {
     await claimHost($)
     await loadBoard($)
+    $.clock.after(UPDATE_DELAY_MS, () => checkUpdate($))
     try {
       await $.command.register({
         name: 'noti',
         description: '알림 보기',
-        argumentHint: '[on | off | hide | show | clear | faces | feedback]',
+        argumentHint: '[on | off | hide | show | clear | updates on | updates off | faces | feedback]',
       })
     } catch (error) {
       $.ui.log('명령을 등록하지 못했습니다. ' + error.message)
@@ -855,6 +899,7 @@ export function register(on) {
       await commit($)
       return { text: hidden ? '알림 띠를 숨겼습니다. 새 핀 물음이 생기면 다시 보입니다.' : '알림 띠를 다시 보입니다.' }
     }
+    if (args === 'updates on' || args === 'updates off') return setUpdateCheck($, args === 'updates on')
     if (args === 'faces') return { text: facesReport((await readMigrated($, FACES_KEY)) || {}) }
     if (args === 'feedback') {
       const version = await $.session.version().then((v) => v.version).catch(() => '')

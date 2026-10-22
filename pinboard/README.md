@@ -26,6 +26,7 @@
 | `/pin edit <번호> <새 문구>` | 그 메모의 문구 수정 |
 | `/pins` | 핀보드 화면 열기. 추가·체크·삭제를 한 화면에서 |
 | `/unpin <번호>` | 그 메모 삭제. `/unpin done` 은 끝낸 것만, `/unpin all` 은 전부 |
+| `/pin updates off` · `/pin updates on` | 새 버전 알림 끄기·켜기 |
 | `/pin feedback` | 의견을 남길 GitHub 이슈 링크 보기 |
 
 번호는 `/pins` 화면에 나와요.

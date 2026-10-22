@@ -489,16 +489,60 @@ async function checkConfirm($, prompt) {
   await commit($)
 }
 
+// 직접 추가한 마켓플레이스는 자동 업데이트가 기본으로 꺼져 있어, 새 버전이 나와도 설치한 사람이 알 길이 없다.
+const UPDATE_KEY = KEY_PREFIX + 'updates'
+const UPDATE_URL = 'https://raw.githubusercontent.com/user0027/claude-mods/main/pinboard/.claude-plugin/plugin.json'
+const UPDATE_EVERY_MS = 24 * 60 * 60 * 1000
+// 세션이 막 뜰 때 띄우면 첫 화면에 묻힌다.
+const UPDATE_DELAY_MS = 3000
+const UPDATE_TOAST_MS = 15000
+
+function isNewer(remote, local) {
+  const a = String(remote).split('.').map(Number)
+  const b = String(local).split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0)
+  }
+  return false
+}
+
+async function checkUpdate($) {
+  const saved = (await $.store.get(UPDATE_KEY)) || {}
+  if (saved.enabled === false || Date.now() - (Number(saved.checkedAt) || 0) < UPDATE_EVERY_MS) return
+  if (await $.env.get('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC')) return
+  await $.store.set(UPDATE_KEY, { ...saved, checkedAt: Date.now() })
+  try {
+    const local = JSON.parse(await $.fs.read($.plugin.root + '/.claude-plugin/plugin.json')).version
+    const response = await $.http.fetch(UPDATE_URL)
+    if (!response.ok) return
+    const remote = JSON.parse(response.text).version
+    if (!isNewer(remote, local)) return
+    $.ui.toast(
+      `새 버전(${remote})이 나왔어요. 터미널에서 claude plugin update pinboard@claude-mods 로 받아 주세요.`,
+      { timeoutMs: UPDATE_TOAST_MS },
+    )
+  } catch (error) {
+    // 오프라인이거나 저장소를 못 읽으면 다음 날 다시 확인한다.
+  }
+}
+
+async function setUpdateCheck($, on) {
+  const saved = (await $.store.get(UPDATE_KEY)) || {}
+  await $.store.set(UPDATE_KEY, { ...saved, enabled: on })
+  return { text: on ? '새 버전이 나오면 알려 드릴게요.' : '새 버전 확인을 껐습니다.' }
+}
+
 export function register(on) {
   on('session.start', async ($, e, next) => {
     await loadBoard($)
     $.clock.after(DEFER_MS, () => commitCheck($))
+    $.clock.after(UPDATE_DELAY_MS, () => checkUpdate($))
     // 이름이 겹치면 register 가 던지고 뒤 줄이 실행되지 않으므로 묶어서 받는다.
     try {
       await $.command.register({
         name: 'pin',
         description: '메모를 입력창 위에 고정. 앞에 ! 를 붙이면 중요 표시',
-        argumentHint: '[메모 | 끝낸 번호 | edit 번호 문구 | feedback]',
+        argumentHint: '[메모 | 끝낸 번호 | edit 번호 문구 | updates on | updates off | feedback]',
       })
       await $.command.register({ name: 'pins', description: '핀보드 열기' })
       await $.command.register({ name: 'unpin', description: '고정한 메모 삭제', argumentHint: '[번호 | done | all]' })
@@ -546,6 +590,7 @@ export function register(on) {
   on('command.run', { command: 'pin' }, async ($, e) => {
     const args = String(e.args || '').trim()
     if (args === 'feedback') return { text: await feedbackText($) }
+    if (args === 'updates on' || args === 'updates off') return setUpdateCheck($, args === 'updates on')
     // 숫자만 적은 메모는 쓸 일이 없으므로 번호로 읽는다.
     const done = args.match(/^(?:done\s+)?(\d+)$/)
     if (done) return markDone($, Number(done[1]))

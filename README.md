@@ -25,6 +25,8 @@ Claude Code 입력창 위에 한 줄씩 붙는 mod 두 개예요.
 ## 업데이트
 
 새 버전은 저절로 들어오지 않아요. Claude Code 는 직접 추가한 마켓플레이스를 자동 업데이트하지 않거든요.
+대신 새 버전이 나오면 세션을 열 때 화면 오른쪽 위에 받는 명령을 알려 드려요. 하루에 한 번만 확인하고,
+`/pin updates off` · `/noti updates off` 로 끌 수 있어요.
 
 자동으로 받으려면 처음 한 번만 켜 두세요. `/plugin` 을 열고 Marketplaces 탭에서 `claude-mods` 를 골라
 Enable auto-update 를 켜면 돼요.
