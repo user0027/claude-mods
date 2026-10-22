@@ -40,8 +40,10 @@ const HOST_STATE = { plugin: 'noti', key: 'hostsAsk' }
 // 알림 mod 의 BAND_CHARS·BAND_RULE 과 같아야 한 띠에서 길이·말투가 맞는다.
 const ASK_CHARS = 40
 const ASK_RULE = `${ASK_CHARS}자 이내 한국어 한 문장으로 쓰고, '~했어요', '~해 주세요' 처럼 해요체 서술어로 끝낸다. '~완료', '~필요' 처럼 명사로 끝내지 않고, '~했다', '~합니다', '~입니까' 같은 다나까 말투도 쓰지 않는다.`
-// 묻는 말이 '~했어요?' 꼴이면 아직 안 한 일까지 한 것처럼 읽힌다.
-const ASK_FORM = '답변에서 아직 안 했거나 해도 될지 물은 단계(커밋·배포 등)는 한 것처럼 적지 않고, \'~했어요?\' 처럼 물어 확인하는 꼴로 쓰지 않는다. 끝난 것만 적고 \'~끝난 걸로 볼지 알려 주세요\' 처럼 끝맺는다.'
+// 묻는 말이 '~했어요?' 꼴이면 아직 안 한 일까지 한 것처럼 읽힌다. 남은 단계 이야기만 하면 모델이 문장을 비우므로 비우지 말라고 같이 적는다.
+const ASK_FORM = '묻는 문장은 비우지 않는다. 문장에는 실제로 끝난 일만 적고, 답변에서 아직 안 했거나 해도 될지 물은 단계(커밋·배포 등)는 한 것처럼 적지 않는다. \'~했어요?\' 처럼 끝맺지 않고 \'~끝난 걸로 볼지 알려 주세요\' 처럼 끝맺는다.'
+// 그래도 끝난 번호만 주고 문장을 비울 때가 있어 대신 띄운다.
+const FALLBACK_ASK = '끝난 것 같은 메모가 있어요. 끝난 걸로 볼지 알려 주세요.'
 // 끝난 번호와 함께 물을 문장까지 받으므로 넉넉히 둔다.
 const AUTO_CHECK_MAX_TOKENS = 160
 const COMMIT_LIMIT = 30
@@ -391,8 +393,7 @@ async function proposeDone($, result, open) {
   if (!result.isAnswered) return false
   const parsed = parseJson(result.text)
   if (!parsed || !Array.isArray(parsed.done)) return false
-  const ask = typeof parsed.ask === 'string' ? parsed.ask.trim() : ''
-  if (!ask) return false
+  const ask = (typeof parsed.ask === 'string' ? parsed.ask.trim() : '') || FALLBACK_ASK
   // 판정 중에 메모가 바뀌었을 수 있으므로 번호가 아니라 id 로 고른다.
   const ids = parsed.done.map((n) => open[Number(n) - 1]).filter(Boolean).map((item) => item.id)
   const hits = ids.filter((id) => memos.some((item) => item.id === id && !item.done) && !proposed.includes(id))
