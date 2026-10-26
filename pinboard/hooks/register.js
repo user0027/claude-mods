@@ -2,7 +2,7 @@
 //
 // 띠에는 /pin 으로 직접 적은 메모만 나온다. 앞에 ! 를 붙이면 중요 표시가 되고, 끝낸 것은 체크한다.
 // AI 가 물었는데 답하지 않고 넘어간 질문은 noti mod 몫이다.
-// 판은 세션이 처음 뜬 작업 디렉터리별로 $.store 에 남는다.
+// 판은 세션마다 $.store 에 따로 남는다. /clear 는 같은 판을 잇고 /branch 는 복사해 간다.
 
 const PANE = 'pinboard'
 // noti 띠의 LEAD_GAP·ICON_SEP 과 같아야 두 띠의 글자 위치가 맞는다.
@@ -18,6 +18,7 @@ const FEEDBACK_URL = 'https://github.com/user0027/claude-mods/issues/new'
 
 const KEY_PREFIX = 'pins:'
 const GLOBAL_KEY = KEY_PREFIX + 'global'
+const SESSION_KEY_PREFIX = KEY_PREFIX + 'session:'
 
 // noti 띠의 INDENT 와 같은 값이어야 두 띠의 왼쪽이 맞는다.
 const INDENT = 2
@@ -59,51 +60,53 @@ let proposed = []
 let askText = ''
 // 커밋으로 끝났는지 마지막으로 본 시각(ms). '부족하다' 고 답한 메모를 같은 커밋으로 다시 묻지 않게 한다.
 let scannedAt = 0
+// 세션이 처음 뜬 폴더. 커밋으로 끝났는지 볼 저장소다.
+let boardDir = ''
 let seq = 0
 // 이번 턴을 연 입력. 원문은 저장하지 않는다.
 let lastPrompt = ''
 
-function hasMemos(board) {
-  const list = Array.isArray(board) ? board : board && board.memos
-  return Array.isArray(list) && list.length > 0
-}
-
-// 하위 폴더에서 연 세션도 위쪽 폴더에 꽂아 둔 핀을 이어 쓰도록, 핀이 있는 가장 가까운 폴더 판을 고른다.
-async function keyFromCwd($) {
+async function sessionId($) {
   try {
-    const cwd = await $.session.cwd()
-    const path = typeof cwd === 'string' ? cwd : cwd && cwd.path
-    if (!path) return GLOBAL_KEY
-    const parts = path.split(/[\\/]/)
-    const sep = path.includes('\\') ? '\\' : '/'
-    for (let n = parts.length; n > 1; n--) {
-      const key = KEY_PREFIX + parts.slice(0, n).join(sep)
-      if (hasMemos(await $.store.get(key))) return key
-    }
-    return KEY_PREFIX + path
-  } catch (error) {}
-  return GLOBAL_KEY
-}
-
-// cwd 는 셸이 지금 가 있는 폴더라 cd 뒤 다시 로드되면 키가 바뀐다. 세션이 처음 정한 키를 세션 id 로 기억한다.
-async function sessionMemoKey($) {
-  try {
-    const id = await $.session.id()
-    return id ? 'start:' + id : null
+    return (await $.session.id()) || null
   } catch (error) {
     return null
   }
 }
 
-async function resolveStoreKey($) {
-  const memo = await sessionMemoKey($)
-  if (memo) {
-    const saved = await $.store.get(memo)
-    // 빈 판을 기억하고 있으면 다시 찾는다. 그사이 위쪽 폴더에 핀이 생겼을 수 있다.
-    if (typeof saved === 'string' && hasMemos(await $.store.get(saved))) return saved
+async function sessionMemoKey($) {
+  const id = await sessionId($)
+  return id ? 'start:' + id : null
+}
+
+async function startDir($) {
+  try {
+    const cwd = await $.session.cwd()
+    return (typeof cwd === 'string' ? cwd : cwd && cwd.path) || ''
+  } catch (error) {
+    return ''
   }
-  const key = await keyFromCwd($)
-  if (memo) await $.store.set(memo, key)
+}
+
+// 판은 세션마다 따로 쓴다. 여러 세션이 한 판을 쓰면 서로의 사본으로 덮어쓴다.
+// /clear·/branch 는 새 id 로 다시 시작하므로 앞 판을 넘겨받는다. /clear 는 같은 판을 잇고, /branch 는 복사한다.
+async function resolveStoreKey($, carry) {
+  const id = await sessionId($)
+  if (!id) return GLOBAL_KEY
+  const memo = 'start:' + id
+  const saved = await $.store.get(memo)
+  if (typeof saved === 'string' && saved.startsWith(SESSION_KEY_PREFIX)) return saved
+  let key = SESSION_KEY_PREFIX + id
+  if (carry && carry.source === 'clear' && carry.key.startsWith(SESSION_KEY_PREFIX)) key = carry.key
+  // 폴더 판을 쓰던 세션은 그 판의 메모를 자기 판으로 옮겨 이어 쓴다.
+  const carried = carry && carry.source !== 'resume' && carry.key !== key ? carry.key : null
+  const from = typeof saved === 'string' ? saved : carried
+  if (from && !(await $.store.get(key))) {
+    const old = await $.store.get(from)
+    if (old) await $.store.set(key, old)
+  }
+  if (key !== SESSION_KEY_PREFIX + id) await $.store.set(memo, key)
+  else if (saved != null) await $.store.delete(memo)
   return key
 }
 
@@ -126,8 +129,8 @@ function withoutOldest(list) {
   return list.filter((_, i) => i !== out)
 }
 
-async function loadBoard($) {
-  storeKey = await resolveStoreKey($)
+async function loadBoard($, carry) {
+  storeKey = await resolveStoreKey($, carry)
   const saved = await $.store.get(storeKey)
   const board = saved && typeof saved === 'object' ? saved : {}
   // 배열만 저장된 옛 형태도 읽는다.
@@ -135,9 +138,19 @@ async function loadBoard($) {
   proposed = Array.isArray(board.proposed) ? board.proposed.filter((id) => typeof id === 'string') : []
   askText = typeof board.askText === 'string' ? board.askText : ''
   scannedAt = Number(board.scannedAt) || 0
+  boardDir = typeof board.dir === 'string' && board.dir ? board.dir : await startDir($)
   await publishAsk($)
   // 띠는 읽기 전에 이미 한 번 그려졌으므로 다시 그리게 한다.
   refresh($)
+}
+
+// 판은 띠에만 그려지고 모델은 못 본다. 핀을 입에 올린 턴에만 실어 매 턴 토큰을 쓰지 않는다.
+const PIN_MENTION = /핀|pin/i
+
+// 번호는 /pins 화면과 같게 매긴다.
+function boardContext() {
+  const lines = memos.map((item, i) => i + 1 + '. ' + (item.done ? '[끝냄] ' : '') + (item.important ? '[중요] ' : '') + item.text)
+  return '사용자가 입력창 위 핀보드에 꽂아 둔 메모(pinboard mod, 사용자에게만 보이던 것):\n' + lines.join('\n')
 }
 
 function refresh($) {
@@ -147,7 +160,7 @@ function refresh($) {
 async function commit($) {
   proposed = proposed.filter((id) => memos.some((item) => item.id === id && !item.done))
   if (proposed.length === 0) askText = ''
-  await $.store.set(storeKey, { memos, proposed, askText, scannedAt })
+  await $.store.set(storeKey, { memos, proposed, askText, scannedAt, dir: boardDir })
   await publishAsk($)
   refresh($)
 }
@@ -417,8 +430,8 @@ function formatTime(ms) {
 
 // 일이 여러 턴·여러 세션에 걸쳐 끝나면 한 턴만 보는 autoCheck 가 놓친다. 판 폴더의 커밋으로 다시 본다.
 async function commitCheck($) {
-  if (!storeKey.startsWith(KEY_PREFIX) || storeKey === GLOBAL_KEY) return
-  const dir = storeKey.slice(KEY_PREFIX.length)
+  const dir = boardDir
+  if (!dir) return
   const open = memos.filter((item) => !item.done && !proposed.includes(item.id))
   const times = open.map(pinnedAt).filter(Boolean)
   if (times.length === 0) return
@@ -555,14 +568,16 @@ export function register(on) {
 
   // /clear·/resume·/branch 뒤에는 session.start 가 다시 돌지 않는다.
   on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
-    await loadBoard($)
+    // 여기까지 storeKey 는 앞 세션의 판이다.
+    await loadBoard($, { source: e.source, key: storeKey })
     $.clock.after(DEFER_MS, () => commitCheck($))
     return next(e)
   })
 
-  // /clear·/resume 은 같은 판을 이어 쓰므로 기억한 키를 남긴다.
+  // 빈 판은 남길 것이 없다. 메모가 있는 판은 나중에 --resume 으로 다시 열 수 있어 둔다.
   on('session.end', async ($, e, next) => {
-    if (e.reason !== 'clear' && e.reason !== 'resume') {
+    if (e.reason !== 'clear' && memos.length === 0 && storeKey.startsWith(SESSION_KEY_PREFIX)) {
+      await $.store.delete(storeKey)
       const memo = await sessionMemoKey($)
       if (memo) await $.store.delete(memo)
     }
@@ -574,6 +589,9 @@ export function register(on) {
     if (!text.startsWith('/') && !WRAPPED_INPUT.test(text)) {
       lastPrompt = text
       if (proposed.length > 0) $.clock.after(DEFER_MS, () => checkConfirm($, text))
+      if (memos.length > 0 && PIN_MENTION.test(text)) {
+        return next({ ...e, context: [...(e.context || []), boardContext()] })
+      }
     }
     return next(e)
   })
