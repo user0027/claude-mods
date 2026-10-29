@@ -2,7 +2,7 @@
 //
 // 띠에는 /pin 으로 직접 적은 메모만 나온다. 앞에 ! 를 붙이면 중요 표시가 되고, 끝낸 것은 체크한다.
 // AI 가 물었는데 답하지 않고 넘어간 질문은 noti mod 몫이다.
-// 판은 세션마다 $.store 에 따로 남는다. /clear 는 같은 판을 잇고 /branch 는 복사해 간다.
+// 핀보드는 세션마다 $.store 에 따로 남는다. /clear 는 같은 핀보드를 잇고 /branch 는 복사해 간다.
 
 const PANE = 'pinboard'
 // noti 띠의 LEAD_GAP·ICON_SEP 과 같아야 두 띠의 글자 위치가 맞는다.
@@ -42,9 +42,9 @@ const HOST_STATE = { plugin: 'noti', key: 'hostsAsk' }
 const ASK_CHARS = 40
 const ASK_RULE = `${ASK_CHARS}자 이내 한국어 한 문장으로 쓰고, '~했어요', '~해 주세요' 처럼 해요체 서술어로 끝낸다. '~완료', '~필요' 처럼 명사로 끝내지 않고, '~했다', '~합니다', '~입니까' 같은 다나까 말투도 쓰지 않는다.`
 // 묻는 말이 '~했어요?' 꼴이면 아직 안 한 일까지 한 것처럼 읽힌다. 남은 단계 이야기만 하면 모델이 문장을 비우므로 비우지 말라고 같이 적는다.
-const ASK_FORM = '묻는 문장은 비우지 않는다. 문장에는 실제로 끝난 일만 적고, 답변에서 아직 안 했거나 해도 될지 물은 단계(커밋·배포 등)는 한 것처럼 적지 않는다. \'~했어요?\' 처럼 끝맺지 않고 \'~끝난 걸로 볼지 알려 주세요\' 처럼 끝맺는다.'
+const ASK_FORM = '묻는 문장은 비우지 않는다. 문장에는 실제로 끝난 일만 적고, 답변에서 아직 안 했거나 해도 될지 물은 단계(커밋·배포 등)는 한 것처럼 적지 않는다. \'~했어요?\' 처럼 끝맺지 않고 \'~끝났으면 /pin 번호로 체크해 주세요\' 처럼 끝맺는다.'
 // 그래도 끝난 번호만 주고 문장을 비울 때가 있어 대신 띄운다.
-const FALLBACK_ASK = '끝난 것 같은 메모가 있어요. 끝난 걸로 볼지 알려 주세요.'
+const FALLBACK_ASK = '끝난 것 같은 메모가 있어요. 끝났으면 /pin 번호로 체크해 주세요.'
 // 끝난 번호와 함께 물을 문장까지 받으므로 넉넉히 둔다.
 const AUTO_CHECK_MAX_TOKENS = 160
 const COMMIT_LIMIT = 30
@@ -88,8 +88,8 @@ async function startDir($) {
   }
 }
 
-// 판은 세션마다 따로 쓴다. 여러 세션이 한 판을 쓰면 서로의 사본으로 덮어쓴다.
-// /clear·/branch 는 새 id 로 다시 시작하므로 앞 판을 넘겨받는다. /clear 는 같은 판을 잇고, /branch 는 복사한다.
+// 핀보드는 세션마다 따로 쓴다. 여러 세션이 한 핀보드를 쓰면 서로의 사본으로 덮어쓴다.
+// /clear·/branch 는 새 id 로 다시 시작하므로 앞 핀보드를 넘겨받는다. /clear 는 같은 핀보드를 잇고, /branch 는 복사한다.
 async function resolveStoreKey($, carry) {
   const id = await sessionId($)
   if (!id) return GLOBAL_KEY
@@ -98,7 +98,7 @@ async function resolveStoreKey($, carry) {
   if (typeof saved === 'string' && saved.startsWith(SESSION_KEY_PREFIX)) return saved
   let key = SESSION_KEY_PREFIX + id
   if (carry && carry.source === 'clear' && carry.key.startsWith(SESSION_KEY_PREFIX)) key = carry.key
-  // 폴더 판을 쓰던 세션은 그 판의 메모를 자기 판으로 옮겨 이어 쓴다.
+  // 폴더별 핀보드를 쓰던 세션은 그 메모를 이 세션의 핀보드로 옮겨 이어 쓴다.
   const carried = carry && carry.source !== 'resume' && carry.key !== key ? carry.key : null
   const from = typeof saved === 'string' ? saved : carried
   if (from && !(await $.store.get(key))) {
@@ -144,7 +144,7 @@ async function loadBoard($, carry) {
   refresh($)
 }
 
-// 판은 띠에만 그려지고 모델은 못 본다. 핀을 입에 올린 턴에만 실어 매 턴 토큰을 쓰지 않는다.
+// 핀보드는 띠에만 그려지고 모델은 못 본다. 핀을 입에 올린 턴에만 실어 매 턴 토큰을 쓰지 않는다.
 const PIN_MENTION = /핀|pin/i
 
 // 번호는 /pins 화면과 같게 매긴다.
@@ -377,7 +377,7 @@ function parseJson(text) {
   }
 }
 
-// 이번 턴에서 끝난 것 같은 메모를 띠에서 묻는다. 체크는 사용자가 됐다고 답할 때만 한다.
+// 이번 턴에서 끝난 것 같은 메모를 띠에서 묻는다. 체크는 사용자가 /pin 번호나 /pins 로 직접 할 때만 한다.
 async function autoCheck($, prompt, answer) {
   const open = memos.filter((item) => !item.done)
   if (open.length === 0) return
@@ -428,7 +428,7 @@ function formatTime(ms) {
   return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes())
 }
 
-// 일이 여러 턴·여러 세션에 걸쳐 끝나면 한 턴만 보는 autoCheck 가 놓친다. 판 폴더의 커밋으로 다시 본다.
+// 일이 여러 턴·여러 세션에 걸쳐 끝나면 한 턴만 보는 autoCheck 가 놓친다. 작업 폴더의 커밋으로 다시 본다.
 async function commitCheck($) {
   const dir = boardDir
   if (!dir) return
@@ -470,7 +470,7 @@ async function commitCheck($) {
   if (!(await proposeDone($, result, open))) await commit($)
 }
 
-// 묻고 있는 메모에 사용자가 됐다고 답했으면 끝낸 것으로, 부족하다고 했으면 묻기를 거둔다. 상관없는 말이면 둔다.
+// 사용자의 말로는 끝냄을 정하지 않는다. 다른 일 이야기도 됐다는 답으로 읽혀서다. 부족하다고 했을 때만 묻기를 거둔다.
 async function checkConfirm($, prompt) {
   const asking = memos.filter((item) => proposed.includes(item.id))
   if (asking.length === 0) return
@@ -478,7 +478,7 @@ async function checkConfirm($, prompt) {
     model: MODEL,
     system:
       'AI 가 사용자 메모 몇 개를 두고 끝냈다고 봐도 될지 물었다. 그 뒤 사용자의 말을 보고 JSON 한 줄로만 답한다. ' +
-      '형식은 {"verdict":"done","text":""} 이다. 됐다·맞다·충분하다처럼 끝난 것을 인정하면 done, ' +
+      '형식은 {"verdict":"none","text":""} 이다. ' +
       '아직 부족하다·더 고칠 게 있다고 하면 more, 그 메모들과 상관없는 다른 일만 말했으면 none 이다. 애매하면 none 이다. ' +
       '아직 확인은 남았는데 사용자의 말로 사정이 바뀌어 물은 말이 맞지 않게 됐으면 update 로 하고, text 에 고친 문장을 적는다. ' + ASK_RULE + ' ' + ASK_FORM,
     prompt:
@@ -496,9 +496,8 @@ async function checkConfirm($, prompt) {
     await commit($)
     return
   }
-  if (verdict !== 'done' && verdict !== 'more') return
+  if (verdict !== 'more') return
   const ids = asking.map((item) => item.id)
-  if (verdict === 'done') memos = memos.map((item) => (ids.includes(item.id) ? { ...item, done: true } : item))
   proposed = proposed.filter((id) => !ids.includes(id))
   await commit($)
 }
@@ -568,13 +567,13 @@ export function register(on) {
 
   // /clear·/resume·/branch 뒤에는 session.start 가 다시 돌지 않는다.
   on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
-    // 여기까지 storeKey 는 앞 세션의 판이다.
+    // 여기까지 storeKey 는 앞 세션의 핀보드 키다.
     await loadBoard($, { source: e.source, key: storeKey })
     $.clock.after(DEFER_MS, () => commitCheck($))
     return next(e)
   })
 
-  // 빈 판은 남길 것이 없다. 메모가 있는 판은 나중에 --resume 으로 다시 열 수 있어 둔다.
+  // 메모가 없는 핀보드는 남길 것이 없다. 메모가 있는 핀보드는 나중에 --resume 으로 다시 열 수 있어 둔다.
   on('session.end', async ($, e, next) => {
     if (e.reason !== 'clear' && memos.length === 0 && storeKey.startsWith(SESSION_KEY_PREFIX)) {
       await $.store.delete(storeKey)
