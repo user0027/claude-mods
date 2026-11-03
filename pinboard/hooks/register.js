@@ -607,12 +607,13 @@ export function register(on) {
 
   on('command.run', { command: 'pin' }, async ($, e) => {
     const args = String(e.args || '').trim()
-    if (args === 'feedback') return { text: await feedbackText($) }
-    if (args === 'updates on' || args === 'updates off') return setUpdateCheck($, args === 'updates on')
+    const word = args.toLowerCase()
+    if (word === 'feedback') return { text: await feedbackText($) }
+    if (word === 'updates on' || word === 'updates off') return setUpdateCheck($, word === 'updates on')
     // 숫자만 적은 메모는 쓸 일이 없으므로 번호로 읽는다.
-    const done = args.match(/^(?:done\s+)?(\d+)$/)
+    const done = args.match(/^(?:done\s+)?(\d+)$/i)
     if (done) return markDone($, Number(done[1]))
-    const edit = args.match(/^edit\s+(\d+)\s*([\s\S]*)$/)
+    const edit = args.match(/^edit\s+(\d+)\s*([\s\S]*)$/i)
     if (edit) return editMemo($, Number(edit[1]), edit[2])
     if (!args) {
       await openPane($)
@@ -627,7 +628,7 @@ export function register(on) {
     return {}
   })
 
-  on('command.run', { command: 'unpin' }, async ($, e) => unpin($, String(e.args || '').trim()))
+  on('command.run', { command: 'unpin' }, async ($, e) => unpin($, String(e.args || '').trim().toLowerCase()))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     // 끝낸 메모까지 그리면 띠가 비지 않아 엔진의 [-] 도 계속 남는다. 끝낸 것은 /pins 화면에서 본다.
