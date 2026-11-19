@@ -4,14 +4,13 @@
 // AI 가 물었는데 답하지 않고 넘어간 질문은 noti mod 몫이다.
 // 핀보드는 세션마다 $.store 에 따로 남는다. /clear 는 같은 핀보드를 잇고 /branch 는 복사해 간다.
 
+import { MAX_MEMO, TEXT_LIMIT, sanitize, evictIndex, withoutOldest, numbered as orderMemos, shorten, memoText } from './memos.mjs'
+
 const PANE = 'pinboard'
 // noti 띠의 LEAD_GAP·ICON_SEP 과 같아야 두 띠의 글자 위치가 맞는다.
 const LEAD_GAP = '  '
 const ICON_SEP = ' : '
 const BAND_LEAD = '⎿' + LEAD_GAP
-// /pin 번호를 한 자리로 칠 수 있는 만큼만 둔다.
-const MAX_MEMO = 4
-const TEXT_LIMIT = 400
 const MEMO_PREVIEW = 40
 // noti 의 FEEDBACK_URL 과 같은 저장소다. 본문을 길게 채우면 링크가 줄을 넘어가 눌리지 않는다.
 const FEEDBACK_URL = 'https://github.com/user0027/claude-mods/issues/new'
@@ -110,25 +109,6 @@ async function resolveStoreKey($, carry) {
   return key
 }
 
-function sanitize(list) {
-  if (!Array.isArray(list)) return []
-  let kept = list.filter((item) => item && typeof item.text === 'string')
-  // 한도를 줄여도 남은 메모보다 끝낸 메모가 먼저 빠지게 한다.
-  while (kept.length > MAX_MEMO) kept = withoutOldest(kept)
-  return kept
-}
-
-// 끝낸 것 중 가장 오래된 것, 없으면 가장 오래된 것을 뺀다.
-function evictIndex(list) {
-  const doneAt = list.findIndex((item) => item.done)
-  return doneAt >= 0 ? doneAt : 0
-}
-
-function withoutOldest(list) {
-  const out = evictIndex(list)
-  return list.filter((_, i) => i !== out)
-}
-
 async function loadBoard($, carry) {
   storeKey = await resolveStoreKey($, carry)
   const saved = await $.store.get(storeKey)
@@ -171,10 +151,6 @@ async function publishAsk($) {
   await $.state.set(ASK_STATE, text).catch(() => {})
 }
 
-function shorten(text, limit) {
-  return text.length > limit ? text.slice(0, limit) + '…' : text
-}
-
 // Text 에 취소선 속성이 없어 결합 문자를 붙인다. ANSI 취소선은 호스트가 띠를 통째로 버린다.
 function strike(text) {
   return Array.from(text)
@@ -189,14 +165,8 @@ function newId() {
 }
 
 function makeMemo(input) {
-  let text = String(input || '').trim()
-  let important = false
-  while (text.startsWith('!')) {
-    important = true
-    text = text.slice(1).trim()
-  }
-  if (!text) return null
-  return { id: newId(), text: shorten(text, TEXT_LIMIT), important, done: false }
+  const memo = memoText(input)
+  return memo && { id: newId(), ...memo, done: false }
 }
 
 async function addMemo($, input) {
@@ -239,7 +209,7 @@ function openPane($) {
 
 // 번호는 띠에 보이는 순서와 맞춘다. 띠는 끝낸 메모를 감추므로 남은 것을 앞에, 끝낸 것을 뒤에 센다.
 function numbered() {
-  return [...memos.filter((item) => !item.done), ...memos.filter((item) => item.done)]
+  return orderMemos(memos)
 }
 
 // /pin 2: 두 번째 메모를 완료로 바꾼다. 이미 끝낸 것이면 그대로 둔다.

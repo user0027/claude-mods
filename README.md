@@ -1,13 +1,13 @@
 # claude-mods
 
-Claude Code 입력창 위에 한 줄씩 붙는 mod 두 개예요.
+Claude Code 입력창 위에 한 줄씩 붙는 mod 두 개예요. Pinboard는 Codex에서도 쓸 수 있어요.
 
 | mod | 하는 일 |
 | --- | --- |
 | [📌 pinboard](pinboard/README.md) | 직접 적은 메모를 입력창 위에 고정해요. |
 | [🤔 noti](noti/README.md) | 답하지 않고 넘어간 AI 질문과 지금 하는 일을 한 줄로 알려 줘요. |
 
-## 설치
+## Claude Code 설치
 
 터미널에서 연 Claude Code 입력창에 쳐요. 둘 다 쓰려면 두 줄 다 치면 돼요.
 
@@ -22,7 +22,11 @@ Claude Code 입력창 위에 한 줄씩 붙는 mod 두 개예요.
 - Claude Code 2.1.287 이상이 필요해요.
 - 데스크톱 앱의 Code 탭에서는 설치 명령이 안 돼요. 터미널에서 설치하면 Code 탭에서도 로드되고요.
 
-## 업데이트
+## Codex 설치
+
+[Pinboard의 Codex 설치 안내](pinboard/README.md#codex)에서 설치 명령과 사용법을 볼 수 있어요.
+
+## Claude Code 업데이트
 
 새 버전은 저절로 들어오지 않아요. Claude Code 는 직접 추가한 마켓플레이스를 자동 업데이트하지 않거든요.
 대신 새 버전이 나오면 세션을 열 때 화면 오른쪽 위에 받는 명령을 알려 드려요. 하루에 한 번만 확인하고,

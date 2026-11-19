@@ -1,0 +1,12 @@
+{
+  "name": "claude-mods",
+  "interface": { "displayName": "Claude Mods" },
+  "plugins": [
+    {
+      "name": "pinboard",
+      "source": { "source": "local", "path": "./pinboard" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}

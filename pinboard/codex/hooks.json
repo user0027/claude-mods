@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/codex/pinboard.mjs\"",
+            "commandWindows": "node \"$env:PLUGIN_ROOT/codex/pinboard.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
