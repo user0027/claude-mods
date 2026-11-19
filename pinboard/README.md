@@ -33,28 +33,3 @@
 번호는 `/pins` 화면에 나와요.
 
 [noti](../noti/README.md) 와 같이 쓰면 답하지 않고 넘어간 AI 질문도 같은 자리에 올라와요.
-
-## Codex
-
-Codex에서는 채팅으로 메모를 관리해요. 메모는 Codex 세션마다 따로 저장되고, 같은 세션을 다시 열면 이어서 쓸 수 있어요. 진행 중인 메모는 매 턴 Codex에 전달돼요. 이번 턴에 끝낸 일이 메모와 맞으면 답변 끝에 알려 줘요. 끝냄 표시는 직접 `pin done 번호`를 입력할 때만 바뀌어요. 입력창 위 메모 띠와 클릭으로 여는 패널은 Claude Code에서 제공해요.
-
-Node.js와 플러그인 훅을 지원하는 Codex CLI가 필요해요. 터미널에서 실행하세요.
-
-```sh
-codex plugin marketplace add user0027/claude-mods
-codex plugin add pinboard@claude-mods
-```
-
-Codex에서 `/hooks`를 열고 Pinboard의 `UserPromptSubmit` 훅을 승인하세요. 채팅에 아래처럼 입력하면 돼요.
-
-| 입력 | 하는 일 |
-|---|---|
-| `pin add !배포 확인하기` | 메모를 추가해요. 앞에 `!`를 붙이면 중요 표시가 붙어요. |
-| `pin list` | 메모 목록과 번호를 봐요. |
-| `pin edit 2 새 문구` | 2번 메모를 고쳐요. |
-| `pin done 2` | 2번 메모를 끝낸 것으로 표시해요. |
-| `pin remove 2` | 2번 메모를 지워요. |
-| `pin remove done` | 끝낸 메모를 지워요. |
-| `pin remove all` | 모든 메모를 지워요. |
-
-메모는 4개까지 남아요. 꽉 차면 끝낸 메모 중 가장 오래된 것이 먼저 빠져요. 모두 진행 중이면 가장 오래된 메모가 빠져요.

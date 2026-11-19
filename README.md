@@ -1,6 +1,6 @@
 # claude-mods
 
-Pinboard와 noti를 Claude Code와 Codex에서 쓸 수 있어요.
+Pinboard와 noti를 Claude Code에서 쓸 수 있어요.
 
 | mod | 하는 일 |
 | --- | --- |
@@ -21,10 +21,6 @@ Pinboard와 noti를 Claude Code와 Codex에서 쓸 수 있어요.
 
 - Claude Code 2.1.287 이상이 필요해요.
 - 데스크톱 앱의 Code 탭에서는 설치 명령이 안 돼요. 터미널에서 설치하면 Code 탭에서도 로드되고요.
-
-## Codex 설치
-
-[Pinboard](pinboard/README.md#codex)와 [noti](noti/README.md#codex)의 설치 명령과 사용법을 볼 수 있어요.
 
 ## Claude Code 업데이트
 
