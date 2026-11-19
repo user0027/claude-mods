@@ -36,7 +36,7 @@
 
 ## Codex
 
-Codex에서는 채팅으로 메모를 관리해요. 메모는 Codex 세션마다 따로 저장되고, 같은 세션을 다시 열면 이어서 쓸 수 있어요. 진행 중인 메모는 매 턴 Codex에 전달돼요. 이번 턴에 끝낸 일이 메모와 맞으면 답변 끝에 알려 줘요. 입력창 위 메모 띠와 클릭으로 여는 패널은 Claude Code에서 제공해요.
+Codex에서는 채팅으로 메모를 관리해요. 메모는 Codex 세션마다 따로 저장되고, 같은 세션을 다시 열면 이어서 쓸 수 있어요. 진행 중인 메모는 매 턴 Codex에 전달돼요. 이번 턴에 끝낸 일이 메모와 맞으면 답변 끝에 알려 줘요. 끝냄 표시는 직접 `pin done 번호`를 입력할 때만 바뀌어요. 입력창 위 메모 띠와 클릭으로 여는 패널은 Claude Code에서 제공해요.
 
 Node.js와 플러그인 훅을 지원하는 Codex CLI가 필요해요. 터미널에서 실행하세요.
 
@@ -45,7 +45,7 @@ codex plugin marketplace add user0027/claude-mods
 codex plugin add pinboard@claude-mods
 ```
 
-Codex에서 `/hooks`를 열고 Pinboard의 `UserPromptSubmit` 훅을 사용할 수 있게 승인하세요. 채팅에 아래처럼 입력하면 돼요.
+Codex에서 `/hooks`를 열고 Pinboard의 `UserPromptSubmit` 훅을 승인하세요. 채팅에 아래처럼 입력하면 돼요.
 
 | 입력 | 하는 일 |
 |---|---|

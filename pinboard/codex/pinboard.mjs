@@ -78,13 +78,29 @@ async function lockBoard(path) {
     } catch (error) {
       if (error.code !== 'EEXIST' || Date.now() >= deadline) throw error
       // A process terminated by the hook timeout cannot remove its lock.
-      try {
-        if (Date.now() - (await stat(path)).mtimeMs > 30000) await rm(path, { force: true })
-      } catch (statError) {
-        if (statError.code !== 'ENOENT') throw statError
-      }
+      await recoverLock(path)
       await delay(40)
     }
+  }
+}
+
+async function recoverLock(path) {
+  const recoveryPath = path + '.recovery'
+  let recovery
+  try {
+    recovery = await open(recoveryPath, 'wx', 0o600)
+  } catch (error) {
+    if (error.code === 'EEXIST') return
+    throw error
+  }
+  try {
+    const existing = await stat(path, { throwIfNoEntry: false }).catch((error) => {
+      if (error.code !== 'ENOENT') throw error
+    })
+    if (existing && Date.now() - existing.mtimeMs > 30000) await rm(path, { force: true })
+  } finally {
+    await recovery.close()
+    await rm(recoveryPath, { force: true })
   }
 }
 
