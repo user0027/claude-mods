@@ -1,6 +1,6 @@
 # claude-mods
 
-Claude Code 입력창 위에 한 줄씩 붙는 mod 두 개예요. Pinboard는 Codex에서도 쓸 수 있어요.
+Pinboard와 noti를 Claude Code와 Codex에서 쓸 수 있어요.
 
 | mod | 하는 일 |
 | --- | --- |
@@ -24,7 +24,7 @@ Claude Code 입력창 위에 한 줄씩 붙는 mod 두 개예요. Pinboard는 Co
 
 ## Codex 설치
 
-[Pinboard의 Codex 설치 안내](pinboard/README.md#codex)에서 설치 명령과 사용법을 볼 수 있어요.
+[Pinboard](pinboard/README.md#codex)와 [noti](noti/README.md#codex)의 설치 명령과 사용법을 볼 수 있어요.
 
 ## Claude Code 업데이트
 

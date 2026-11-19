@@ -31,3 +31,21 @@ AI 가 물었는데 다른 일을 시키느라 답을 잊은 질문, 입력창 �
 | `/noti feedback` | 의견을 남길 GitHub 이슈 링크 보기 |
 
 [pinboard](../pinboard/README.md) 와 같이 쓰면 메모 아래에 한 줄로 붙어요.
+
+## Codex
+
+Codex는 답을 기다리는 질문을 답변 끝에 `🤔` 한 줄로 남겨요. 다른 일을 먼저 요청해도 그 질문이 여전히 필요하면 다시 보여 줘요. 답했는지는 같은 세션의 Codex 모델이 판단해요. noti는 세션별로 마지막 질문 한 줄을 저장해요. 입력창 위 띠와 작업 중 애니메이션은 Claude Code에서 제공해요.
+
+Node.js와 플러그인 훅을 지원하는 Codex CLI가 필요해요. 터미널에서 실행하세요.
+
+```sh
+codex plugin marketplace add user0027/claude-mods
+codex plugin add noti@claude-mods
+```
+
+마켓을 이미 추가했다면 `codex plugin marketplace upgrade claude-mods`로 목록을 먼저 새로 받아요. Codex의 `/hooks`에서 noti의 `UserPromptSubmit`과 `Stop`을 승인하고 켜세요.
+
+| 입력 | 하는 일 |
+|---|---|
+| `noti` | 남은 질문을 다시 봐요. |
+| `noti clear` | 남은 질문을 지워요. |
