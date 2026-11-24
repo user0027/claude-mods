@@ -147,8 +147,13 @@ async function resolveStoreKey($, carry) {
   const id = await sessionId($)
   if (!id) return GLOBAL_KEY
   const memo = 'start:' + id
-  const saved = await $.store.get(memo)
-  if (typeof saved === 'string' && saved.startsWith(SESSION_KEY_PREFIX)) return saved
+  let saved = await $.store.get(memo)
+  if (typeof saved === 'string' && saved.startsWith(SESSION_KEY_PREFIX)) {
+    if (await $.store.get(saved)) return saved
+    // 가리키던 알림 목록이 지워졌으면 포인터만 남는다. $.store 는 키 목록을 주지 않아 여기서 지워야 한다.
+    await $.store.delete(memo)
+    saved = undefined
+  }
   let key = SESSION_KEY_PREFIX + id
   if (carry && carry.source === 'clear' && carry.key.startsWith(SESSION_KEY_PREFIX)) key = carry.key
   if (carry && carry.source === 'fork' && carry.key !== key && !(await $.store.get(key))) {
@@ -171,7 +176,19 @@ async function readMigrated($, key) {
   return legacy
 }
 
+// 세션 중간에 모듈이 다시 로드되면(파일 수정, 플러그인 리로드) session.start 가 없어 띠가 빈 채 남는다.
+let loaded = false
+
+async function ensureLoaded($) {
+  if (loaded) return
+  // 다시 들어와도 한 번만 읽게 먼저 세운다.
+  loaded = true
+  await loadBoard($)
+  await registerCommands($)
+}
+
 async function loadBoard($, carry) {
+  loaded = true
   storeKey = await resolveStoreKey($, carry)
   const saved = await readMigrated($, storeKey)
   const board = saved && typeof saved === 'object' ? saved : {}
@@ -774,30 +791,36 @@ async function setUpdateCheck($, on) {
   return { text: on ? '새 버전이 나오면 알려 드릴게요.' : '새 버전 확인을 껐습니다.' }
 }
 
+// 모듈이 다시 로드되면 명령 등록도 사라진다. 세션이 새로 열리는 자리마다 다시 부른다.
+async function registerCommands($) {
+  try {
+    await $.command.register({
+      name: 'noti',
+      description: '알림 보기',
+      argumentHint: '[on | off | hide | show | clear | updates on | updates off | faces | feedback]',
+    })
+  } catch (error) {
+    $.ui.log('명령을 등록하지 못했습니다. ' + error.message)
+  }
+}
+
 export function register(on) {
   on('session.start', async ($, e, next) => {
     await claimHost($)
     await loadBoard($)
     $.clock.after(UPDATE_DELAY_MS, () => checkUpdate($))
-    try {
-      await $.command.register({
-        name: 'noti',
-        description: '알림 보기',
-        argumentHint: '[on | off | hide | show | clear | updates on | updates off | faces | feedback]',
-      })
-    } catch (error) {
-      $.ui.log('명령을 등록하지 못했습니다. ' + error.message)
-    }
+    await registerCommands($)
     return next(e)
   })
 
-  // /clear·/resume·/branch 뒤에는 session.start 가 다시 실행되지 않아서 여기서 다시 읽는다.
+  // /clear·/resume·/branch·/compact 뒤에는 session.start 가 다시 실행되지 않아서 여기서 다시 읽는다.
   // 질문은 대화에 매인 것이라 /clear 하면 비운다. 끄고 켠 상태는 남긴다.
-  on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
+  on('classic.SessionStart', { source: ['clear', 'resume', 'fork', 'compact'] }, async ($, e, next) => {
     await claimHost($)
-    // 여기까지 storeKey 는 앞 세션의 판이다.
-    await loadBoard($, { source: e.source, key: storeKey })
+    // 여기까지 storeKey 는 앞 세션의 판이다. compact 는 같은 세션이라 넘겨받을 것이 없다.
+    await loadBoard($, e.source === 'compact' ? undefined : { source: e.source, key: storeKey })
     if (e.source === 'clear') await clearAll($)
+    await registerCommands($)
     return next(e)
   })
 
@@ -893,6 +916,7 @@ export function register(on) {
   })
 
   on('command.run', { command: 'noti' }, async ($, e) => {
+    await ensureLoaded($)
     const args = String(e.args || '').trim()
     if (args === 'on' || args === 'off') {
       if ((args === 'on') !== enabled) await toggleEnabled($)
@@ -922,6 +946,7 @@ export function register(on) {
   // 입력창 위 띠. 버튼 없이 글자만 흐리게 한 줄 그린다. 체크는 /noti 화면에서 한다.
   //   ⎿  🤔 : 제목 후보 중에서 골라 주세요
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    await ensureLoaded($)
     const own = questions.filter((q) => !q.done && !q.judging).pop()
     const pinAsk = await readPinAsk($)
     // 차례: 핀이 끝났는지 묻는 말, 이번 턴 소식, 답을 기다리는 질문, 지난 턴 소식.

@@ -93,8 +93,13 @@ async function resolveStoreKey($, carry) {
   const id = await sessionId($)
   if (!id) return GLOBAL_KEY
   const memo = 'start:' + id
-  const saved = await $.store.get(memo)
-  if (typeof saved === 'string' && saved.startsWith(SESSION_KEY_PREFIX)) return saved
+  let saved = await $.store.get(memo)
+  if (typeof saved === 'string' && saved.startsWith(SESSION_KEY_PREFIX)) {
+    if (await $.store.get(saved)) return saved
+    // 가리키던 핀보드가 지워졌으면 포인터만 남는다. $.store 는 키 목록을 주지 않아 여기서 지워야 한다.
+    await $.store.delete(memo)
+    saved = undefined
+  }
   let key = SESSION_KEY_PREFIX + id
   if (carry && carry.source === 'clear' && carry.key.startsWith(SESSION_KEY_PREFIX)) key = carry.key
   // 폴더별 핀보드를 쓰던 세션은 그 메모를 이 세션의 핀보드로 옮겨 이어 쓴다.
@@ -103,13 +108,27 @@ async function resolveStoreKey($, carry) {
   if (from && !(await $.store.get(key))) {
     const old = await $.store.get(from)
     if (old) await $.store.set(key, old)
+    // 폴더별 핀보드는 옮긴 뒤 지운다. 두면 아무도 읽지 않는 사본이 남는다.
+    if (!from.startsWith(SESSION_KEY_PREFIX)) await $.store.delete(from)
   }
   if (key !== SESSION_KEY_PREFIX + id) await $.store.set(memo, key)
   else if (saved != null) await $.store.delete(memo)
   return key
 }
 
+// 세션 중간에 모듈이 다시 로드되면(파일 수정, 플러그인 리로드) session.start 가 없어 띠가 빈 채 남는다.
+let loaded = false
+
+async function ensureLoaded($) {
+  if (loaded) return
+  // 다시 들어와도 한 번만 읽게 먼저 세운다.
+  loaded = true
+  await loadBoard($)
+  await registerCommands($)
+}
+
 async function loadBoard($, carry) {
+  loaded = true
   storeKey = await resolveStoreKey($, carry)
   const saved = await $.store.get(storeKey)
   const board = saved && typeof saved === 'object' ? saved : {}
@@ -515,31 +534,37 @@ async function setUpdateCheck($, on) {
   return { text: on ? '새 버전이 나오면 알려 드릴게요.' : '새 버전 확인을 껐습니다.' }
 }
 
+// 모듈이 다시 로드되면 명령 등록도 사라지므로 세션이 새로 열리는 자리마다 다시 부른다.
+async function registerCommands($) {
+  // 이름이 겹치면 register 가 던지고 뒤 줄이 실행되지 않으므로 묶어서 받는다.
+  try {
+    await $.command.register({
+      name: 'pin',
+      description: '메모를 입력창 위에 고정. 앞에 ! 를 붙이면 중요 표시',
+      argumentHint: '[메모 | 끝낸 번호 | edit 번호 문구 | updates on | updates off | feedback]',
+    })
+    await $.command.register({ name: 'pins', description: '핀보드 열기' })
+    await $.command.register({ name: 'unpin', description: '고정한 메모 삭제', argumentHint: '[번호 | done | all]' })
+  } catch (error) {
+    $.ui.log('명령을 등록하지 못했습니다. ' + error.message)
+  }
+}
+
 export function register(on) {
   on('session.start', async ($, e, next) => {
     await loadBoard($)
     $.clock.after(DEFER_MS, () => commitCheck($))
     $.clock.after(UPDATE_DELAY_MS, () => checkUpdate($))
-    // 이름이 겹치면 register 가 던지고 뒤 줄이 실행되지 않으므로 묶어서 받는다.
-    try {
-      await $.command.register({
-        name: 'pin',
-        description: '메모를 입력창 위에 고정. 앞에 ! 를 붙이면 중요 표시',
-        argumentHint: '[메모 | 끝낸 번호 | edit 번호 문구 | updates on | updates off | feedback]',
-      })
-      await $.command.register({ name: 'pins', description: '핀보드 열기' })
-      await $.command.register({ name: 'unpin', description: '고정한 메모 삭제', argumentHint: '[번호 | done | all]' })
-    } catch (error) {
-      $.ui.log('명령을 등록하지 못했습니다. ' + error.message)
-    }
+    await registerCommands($)
     return next(e)
   })
 
-  // /clear·/resume·/branch 뒤에는 session.start 가 다시 돌지 않는다.
-  on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
-    // 여기까지 storeKey 는 앞 세션의 핀보드 키다.
-    await loadBoard($, { source: e.source, key: storeKey })
+  // /clear·/resume·/branch·/compact 뒤에는 session.start 가 다시 돌지 않는다.
+  on('classic.SessionStart', { source: ['clear', 'resume', 'fork', 'compact'] }, async ($, e, next) => {
+    // 여기까지 storeKey 는 앞 세션의 핀보드 키다. compact 는 같은 세션이라 넘겨받을 것이 없다.
+    await loadBoard($, e.source === 'compact' ? undefined : { source: e.source, key: storeKey })
     $.clock.after(DEFER_MS, () => commitCheck($))
+    await registerCommands($)
     return next(e)
   })
 
@@ -576,6 +601,7 @@ export function register(on) {
   })
 
   on('command.run', { command: 'pin' }, async ($, e) => {
+    await ensureLoaded($)
     const args = String(e.args || '').trim()
     const word = args.toLowerCase()
     if (word === 'feedback') return { text: await feedbackText($) }
@@ -594,13 +620,18 @@ export function register(on) {
   })
 
   on('command.run', { command: 'pins' }, async ($) => {
+    await ensureLoaded($)
     await openPane($)
     return {}
   })
 
-  on('command.run', { command: 'unpin' }, async ($, e) => unpin($, String(e.args || '').trim().toLowerCase()))
+  on('command.run', { command: 'unpin' }, async ($, e) => {
+    await ensureLoaded($)
+    return unpin($, String(e.args || '').trim().toLowerCase())
+  })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    await ensureLoaded($)
     // 끝낸 메모까지 그리면 띠가 비지 않아 엔진의 [-] 도 계속 남는다. 끝낸 것은 /pins 화면에서 본다.
     if (!memos.some((item) => !item.done)) return next(e)
     const ui = $.ui.resolve(e)
